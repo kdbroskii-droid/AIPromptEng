@@ -13,22 +13,22 @@ Categories = {}
 }
 
 local StopWords = {
-the = true,
-a = true,
-an = true,
-to = true,
-me = true,
-my = true,
-and = true,
+["the"] = true,
+["a"] = true,
+["an"] = true,
+["to"] = true,
+["me"] = true,
+["my"] = true,
+["and"] = true,
 ["or"] = true,
 ["in"] = true,
 ["on"] = true,
-with = true,
-of = true,
-it = true,
-this = true,
-that = true,
-please = true
+["with"] = true,
+["of"] = true,
+["it"] = true,
+["this"] = true,
+["that"] = true,
+["please"] = true
 }
 
 StopWords["for"] = true
