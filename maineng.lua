@@ -1,105 +1,89 @@
 local AIPromptEng = {}
 
-AIPromptEng.Version = "2.0"
+AIPromptEng.Version = "5.0"
 
-AIPromptEng.Database = {
+local Database = {
     Scripts = {},
-    GameObjects = {},
+    Objects = {},
     Vocabulary = {},
     Feedback = {},
+    History = {},
     LearnedAliases = {},
-    History = {}
-}
-
-AIPromptEng.Config = {
-    MaxMatches = 25,
-    MinimumConfidence = 25,
-    FeedbackConfidence = 40,
-    LearnFromGame = true
-}
-
-AIPromptEng.Intents = {
-    set = {
-        "set",
-        "change",
-        "make",
-        "put",
-        "update"
-    },
-
-    add = {
-        "add",
-        "increase",
-        "give",
-        "gain",
-        "grant",
-        "boost"
-    },
-
-    remove = {
-        "remove",
-        "take",
-        "subtract",
-        "decrease",
-        "delete",
-        "clear"
-    },
-
-    get = {
-        "get",
-        "find",
-        "show",
-        "search",
-        "locate",
-        "look for"
-    },
-
-    create = {
-        "create",
-        "make",
-        "build",
-        "generate",
-        "spawn",
-        "add"
-    },
-
-    gui = {
-        "gui",
-        "button",
-        "menu",
-        "interface",
-        "ui",
-        "screen"
-    },
-
-    autofarm = {
-        "autofarm",
-        "auto farm",
-        "farm automatically",
-        "automatic farm",
-        "grind automatically",
-        "farm"
-    },
-
-    goto = {
-        "goto",
-        "go to",
-        "move to",
-        "travel to",
-        "teleport to",
-        "navigate to"
-    },
-
-    script = {
-        "script",
-        "code",
-        "function",
-        "system",
-        "mechanic"
+    Categories = {
+        Scripts = {},
+        LocalScripts = {},
+        ModuleScripts = {},
+        UI = {},
+        Remotes = {},
+        Values = {},
+        Folders = {},
+        Tools = {},
+        Models = {},
+        Checkpoints = {},
+        Other = {}
     }
 }
 
-AIPromptEng.Aliases = {
+local IntentPatterns = {
+    {
+        Intent = "autofarm",
+        Words = {
+            "autofarm",
+            "auto farm",
+            "farm automatically",
+            "farm for me",
+            "automatically farm"
+        }
+    },
+    {
+        Intent = "set",
+        Words = {
+            "set",
+            "change",
+            "update",
+            "make my"
+        }
+    },
+    {
+        Intent = "add",
+        Words = {
+            "give",
+            "add",
+            "increase",
+            "grant",
+            "award"
+        }
+    },
+    {
+        Intent = "remove",
+        Words = {
+            "remove",
+            "take",
+            "subtract",
+            "delete"
+        }
+    },
+    {
+        Intent = "find",
+        Words = {
+            "find",
+            "search",
+            "locate",
+            "look for"
+        }
+    },
+    {
+        Intent = "create",
+        Words = {
+            "create",
+            "make",
+            "build",
+            "generate"
+        }
+    }
+}
+
+local TargetAliases = {
     money = {
         "money",
         "cash",
@@ -107,129 +91,99 @@ AIPromptEng.Aliases = {
         "coin",
         "currency",
         "credits",
-        "gold",
-        "balance",
-        "bucks"
+        "gold"
     },
-
     health = {
         "health",
         "hp",
         "hitpoints",
         "hit points"
     },
-
     speed = {
         "speed",
         "walkspeed",
         "walk speed",
-        "movement speed",
-        "velocity"
+        "movement speed"
     },
-
     inventory = {
         "inventory",
         "items",
-        "item",
-        "bag",
         "backpack",
         "storage"
     },
-
     experience = {
         "experience",
         "xp",
-        "level",
-        "levels"
-    },
-
-    player = {
-        "player",
-        "me",
-        "my",
-        "self",
-        "user"
-    },
-
-    gui = {
-        "gui",
-        "ui",
-        "button",
-        "menu",
-        "interface",
-        "screen"
-    },
-
-    autofarm = {
-        "autofarm",
-        "auto farm",
-        "farm",
-        "automatic farm",
-        "grind"
-    },
-
-    rare = {
-        "rare",
-        "rare zone",
-        "rare area",
-        "rare place"
-    },
-
-    value = {
-        "value",
-        "best",
-        "highest",
-        "most",
-        "maximum",
-        "max"
+        "level"
     }
 }
 
-local function SafeString(value)
+local StopWords = {
+    the = true,
+    a = true,
+    an = true,
+    to = true,
+    for = true,
+    me = true,
+    my = true,
+    and = true,
+    or = true,
+    in = true,
+    on = true,
+    with = true,
+    of = true,
+    it = true,
+    this = true,
+    that = true,
+    please = true
+}
+
+local function Safe(value)
     return tostring(value or "")
 end
 
-local function Normalize(text)
-    text = string.lower(SafeString(text))
+local function Normalize(value)
+    local text = string.lower(Safe(value))
 
-    text = text:gsub("[%c]", " ")
-    text = text:gsub("[_%-%.%(%){%}%[%],:;!%?]", " ")
+    text = text:gsub("_", " ")
+    text = text:gsub("-", " ")
+    text = text:gsub("%.", " ")
+    text = text:gsub("[^%w%s]", " ")
     text = text:gsub("%s+", " ")
 
     return text
 end
 
-local function GetWords(text)
-    local words = {}
-    local used = {}
+local function Contains(text, search)
+    text = Normalize(text)
+    search = Normalize(search)
 
-    for word in Normalize(text):gmatch("%S+") do
-        if #word >= 2 and not used[word] then
-            used[word] = true
-            table.insert(words, word)
-        end
+    if search == "" then
+        return false
     end
 
-    return words
-end
-
-local function Contains(text, search)
     return string.find(
-        Normalize(text),
-        Normalize(search),
+        text,
+        search,
         1,
         true
     ) ~= nil
 end
 
-local function SplitName(text)
+local function GetWords(text)
     local result = {}
+    local used = {}
 
-    for word in SafeString(text):gmatch("[A-Za-z0-9]+") do
-        if #word >= 2 then
+    for word in Normalize(text):gmatch("%S+") do
+        if not StopWords[word]
+            and #word > 1
+            and not used[word] then
+
+            used[word] = true
+
             table.insert(
                 result,
-                string.lower(word)
+                word
             )
         end
     end
@@ -237,63 +191,188 @@ local function SplitName(text)
     return result
 end
 
-local function WordSimilarity(a, b)
-    a = Normalize(a)
-    b = Normalize(b)
+local function GetPath(instance)
+    local success, result = pcall(function()
+        return instance:GetFullName()
+    end)
 
-    if a == b then
-        return 100
+    if success then
+        return Safe(result)
     end
 
-    if a == "" or b == "" then
-        return 0
+    return Safe(instance.Name)
+end
+
+local function LearnText(text)
+    for _, word in ipairs(GetWords(text)) do
+        Database.Vocabulary[word] =
+            (Database.Vocabulary[word] or 0)
+            + 1
+    end
+end
+
+local function GetCategory(instance)
+    if instance:IsA("LocalScript") then
+        return "LocalScripts"
     end
 
-    if string.find(a, b, 1, true)
-        or string.find(b, a, 1, true) then
-        return 80
+    if instance:IsA("ModuleScript") then
+        return "ModuleScripts"
     end
 
-    local aWords = GetWords(a)
-    local bWords = GetWords(b)
+    if instance:IsA("Script") then
+        return "Scripts"
+    end
 
-    local score = 0
+    if instance:IsA("RemoteEvent")
+        or instance:IsA("RemoteFunction") then
 
-    for _, wordA in ipairs(aWords) do
-        for _, wordB in ipairs(bWords) do
+        return "Remotes"
+    end
 
-            if wordA == wordB then
-                score = score + 20
+    if instance:IsA("ScreenGui")
+        or instance:IsA("BillboardGui")
+        or instance:IsA("SurfaceGui")
+        or instance:IsA("Frame")
+        or instance:IsA("TextButton")
+        or instance:IsA("ImageButton")
+        or instance:IsA("TextLabel")
+        or instance:IsA("TextBox")
+        or instance:IsA("ScrollingFrame") then
 
-            elseif string.find(
-                wordA,
-                wordB,
-                1,
-                true
-            ) then
-                score = score + 12
+        return "UI"
+    end
 
-            elseif string.find(
-                wordB,
-                wordA,
-                1,
-                true
-            ) then
-                score = score + 12
-            end
+    if instance:IsA("IntValue")
+        or instance:IsA("NumberValue")
+        or instance:IsA("BoolValue")
+        or instance:IsA("StringValue")
+        or instance:IsA("ObjectValue") then
 
+        return "Values"
+    end
+
+    if instance:IsA("Folder") then
+        return "Folders"
+    end
+
+    if instance:IsA("Tool") then
+        return "Tools"
+    end
+
+    if instance:IsA("Model") then
+        return "Models"
+    end
+
+    return "Other"
+end
+
+local function IsCheckpoint(instance)
+    local name = Normalize(instance.Name)
+    local path = Normalize(GetPath(instance))
+
+    local checkpointWords = {
+        "checkpoint",
+        "waypoint",
+        "zone",
+        "spawn",
+        "route",
+        "destination",
+        "rarezone",
+        "rare zone",
+        "base"
+    }
+
+    for _, word in ipairs(checkpointWords) do
+        if Contains(name, word)
+            or Contains(path, word) then
+
+            return true
         end
     end
 
-    return math.min(
-        score,
-        100
-    )
+    return false
 end
 
-local function ExtractNumber(text)
+local function MakeInfo(instance)
+    local category = GetCategory(instance)
+
+    if instance:IsA("BasePart") then
+        if IsCheckpoint(instance) then
+            category = "Checkpoints"
+        else
+            return nil
+        end
+    end
+
+    return {
+        Name = Safe(instance.Name),
+        Path = GetPath(instance),
+        ClassName = Safe(instance.ClassName),
+        Category = category
+    }
+end
+
+local function AddObject(info)
+    if type(info) ~= "table" then
+        return false
+    end
+
+    local path = Safe(
+        info.Path
+        or info.Name
+    )
+
+    for _, existing in ipairs(
+        Database.Objects
+    ) do
+
+        local existingPath = Safe(
+            existing.Path
+            or existing.Name
+        )
+
+        if existingPath == path then
+            return false
+        end
+    end
+
+    table.insert(
+        Database.Objects,
+        info
+    )
+
+    local category = Safe(
+        info.Category
+    )
+
+    if Database.Categories[category] then
+        table.insert(
+            Database.Categories[category],
+            info
+        )
+    end
+
+    if category == "Scripts"
+        or category == "LocalScripts"
+        or category == "ModuleScripts" then
+
+        table.insert(
+            Database.Scripts,
+            info
+        )
+    end
+
+    LearnText(info.Name)
+    LearnText(info.Path)
+    LearnText(info.ClassName)
+
+    return true
+end
+
+local function ExtractNumber(prompt)
     local number = string.match(
-        SafeString(text),
+        Safe(prompt),
         "(%d[%d,]*)"
     )
 
@@ -304,522 +383,261 @@ local function ExtractNumber(text)
     return nil
 end
 
-local function DetectSubject(prompt)
-    local text = Normalize(prompt)
+local function DetectIntent(prompt)
+    local bestIntent = "unknown"
+    local bestScore = 0
 
-    if Contains(text, "me")
-        or Contains(text, "my")
-        or Contains(text, "myself") then
-        return "me"
+    for _, pattern in ipairs(
+        IntentPatterns
+    ) do
+
+        local score = 0
+
+        for _, word in ipairs(
+            pattern.Words
+        ) do
+
+            if Contains(
+                prompt,
+                word
+            ) then
+
+                score = score + #word
+            end
+        end
+
+        if score > bestScore then
+            bestScore = score
+            bestIntent = pattern.Intent
+        end
     end
 
-    if Contains(text, "all players") then
-        return "allPlayers"
+    return bestIntent, bestScore
+end
+
+local function DetectTarget(prompt)
+    local bestTarget = "unknown"
+    local bestScore = 0
+
+    for target, aliases in pairs(
+        TargetAliases
+    ) do
+
+        for _, alias in ipairs(
+            aliases
+        ) do
+
+            if Contains(
+                prompt,
+                alias
+            ) then
+
+                local score = #alias
+
+                if score > bestScore then
+                    bestScore = score
+                    bestTarget = target
+                end
+            end
+        end
     end
 
-    if Contains(text, "player") then
-        return "player"
+    if bestTarget ~= "unknown" then
+        return bestTarget
     end
 
-    return "me"
+    for alias, target in pairs(
+        Database.LearnedAliases
+    ) do
+
+        if Contains(
+            prompt,
+            alias
+        ) then
+
+            return target
+        end
+    end
+
+    local bestWord = "unknown"
+    local bestCount = 0
+
+    for _, word in ipairs(
+        GetWords(prompt)
+    ) do
+
+        local count =
+            Database.Vocabulary[word]
+
+        if count
+            and count > bestCount then
+
+            bestCount = count
+            bestWord = word
+        end
+    end
+
+    return bestWord
 end
 
 local function DetectGUI(prompt)
-    local text = Normalize(prompt)
+    local words = {
+        "gui",
+        "ui",
+        "button",
+        "menu",
+        "interface",
+        "screen"
+    }
 
-    if Contains(text, "gui")
-        or Contains(text, "button")
-        or Contains(text, "menu")
-        or Contains(text, "ui")
-        or Contains(text, "interface") then
-        return true
+    for _, word in ipairs(words) do
+        if Contains(
+            prompt,
+            word
+        ) then
+
+            return true
+        end
     end
 
     return false
 end
 
 local function DetectRayfield(prompt)
-    local text = Normalize(prompt)
-
-    if Contains(text, "rayfield") then
-        return true
-    end
-
-    return false
-end
-
-local function DetectBestValue(prompt)
-    local text = Normalize(prompt)
-
-    if Contains(text, "best")
-        or Contains(text, "highest")
-        or Contains(text, "most valuable")
-        or Contains(text, "highest value")
-        or Contains(text, "best value") then
-        return true
-    end
-
-    return false
-end
-
-local function DetectIntent(prompt)
-    local text = Normalize(prompt)
-
-    local scores = {}
-
-    for intent, words in pairs(
-        AIPromptEng.Intents
-    ) do
-
-        scores[intent] = 0
-
-        for _, word in ipairs(words) do
-
-            if Contains(text, word) then
-                scores[intent] =
-                    scores[intent] + 20
-            end
-
-        end
-
-    end
-
-    if Contains(text, "every time")
-        and DetectGUI(text) then
-
-        scores.gui =
-            (scores.gui or 0) + 25
-
-        scores.add =
-            (scores.add or 0) + 20
-    end
-
-    if Contains(text, "autofarm")
-        or Contains(text, "auto farm") then
-
-        scores.autofarm = 100
-    end
-
-    local bestIntent = "unknown"
-    local bestScore = 0
-
-    for intent, score in pairs(scores) do
-
-        if score > bestScore then
-            bestIntent = intent
-            bestScore = score
-        end
-
-    end
-
-    return bestIntent, bestScore
-end
-
-local function DetectAction(prompt, intent)
-    local text = Normalize(prompt)
-
-    if intent == "autofarm" then
-        return "autofarm"
-    end
-
-    if Contains(text, "set") then
-        return "setTarget"
-    end
-
-    if Contains(text, "give")
-        or Contains(text, "add")
-        or Contains(text, "increase")
-        or Contains(text, "gain")
-        or Contains(text, "grant") then
-
-        return "addTarget"
-    end
-
-    if Contains(text, "remove")
-        or Contains(text, "take")
-        or Contains(text, "subtract")
-        or Contains(text, "decrease") then
-
-        return "removeTarget"
-    end
-
-    if DetectGUI(text) then
-        return "createGUI"
-    end
-
-    if Contains(text, "find")
-        or Contains(text, "search")
-        or Contains(text, "locate") then
-
-        return "findTarget"
-    end
-
-    if intent == "create" then
-        return "create"
-    end
-
-    return "unknown"
-end
-
-local function DetectTarget(prompt)
-    local text = Normalize(prompt)
-
-    local bestTarget = "unknown"
-    local bestScore = 0
-
-    for target, aliases in pairs(
-        AIPromptEng.Aliases
-    ) do
-
-        for _, alias in ipairs(aliases) do
-
-            if Contains(text, alias) then
-
-                local score =
-                    #alias * 5
-
-                if score > bestScore then
-                    bestTarget = target
-                    bestScore = score
-                end
-
-            end
-
-        end
-
-    end
-
-    for alias, target in pairs(
-        AIPromptEng.Database.LearnedAliases
-    ) do
-
-        if Contains(text, alias) then
-            bestTarget = target
-            bestScore = 100
-        end
-
-    end
-
-    return bestTarget
-end
-
-local function LearnWord(word, source)
-    word = Normalize(word)
-
-    if word == ""
-        or #word < 2 then
-        return
-    end
-
-    local entry =
-        AIPromptEng.Database.Vocabulary[word]
-
-    if not entry then
-
-        AIPromptEng.Database.Vocabulary[word] = {
-            Count = 1,
-            Sources = {
-                [source] = true
-            }
-        }
-
-    else
-
-        entry.Count =
-            entry.Count + 1
-
-        entry.Sources[source] = true
-
-    end
-end
-
-local function LearnObject(info)
-    if type(info) ~= "table" then
-        return
-    end
-
-    local name =
-        SafeString(info.Name)
-
-    local path =
-        SafeString(info.Path)
-
-    local category =
-        SafeString(info.Category)
-
-    for _, word in ipairs(
-        SplitName(name)
-    ) do
-
-        LearnWord(
-            word,
-            "name"
-        )
-
-    end
-
-    for _, word in ipairs(
-        SplitName(path)
-    ) do
-
-        LearnWord(
-            word,
-            "path"
-        )
-
-    end
-
-    for _, word in ipairs(
-        SplitName(category)
-    ) do
-
-        LearnWord(
-            word,
-            "category"
-        )
-
-    end
-end
-
-local function ObjectSearchText(info)
-    return Normalize(
-        SafeString(info.Name)
-        .. " "
-        .. SafeString(info.Path)
-        .. " "
-        .. SafeString(info.ClassName)
-        .. " "
-        .. SafeString(info.Category)
-        .. " "
-        .. SafeString(info.ParentName)
+    return Contains(
+        prompt,
+        "rayfield"
     )
 end
 
-local function IsCheckpointObject(info)
-    local category =
-        Normalize(info.Category)
-
-    if category == "checkpoints" then
-        return true
+local function ScoreWordMatch(
+    queryWord,
+    objectWord
+)
+    if queryWord == objectWord then
+        return 100
     end
 
-    local text =
-        ObjectSearchText(info)
+    if string.find(
+        objectWord,
+        queryWord,
+        1,
+        true
+    ) then
 
-    local words = {
-        "checkpoint",
-        "waypoint",
-        "zone",
-        "route",
-        "spawn",
-        "portal",
-        "teleport"
-    }
+        return 65
+    end
 
-    for _, word in ipairs(words) do
+    if string.find(
+        queryWord,
+        objectWord,
+        1,
+        true
+    ) then
 
-        if Contains(text, word) then
-            return true
+        return 45
+    end
+
+    return 0
+end
+
+local function ScoreInfo(
+    queryWords,
+    info,
+    intent
+)
+    local score = 0
+
+    local nameWords =
+        GetWords(info.Name)
+
+    local pathWords =
+        GetWords(info.Path)
+
+    local classWords =
+        GetWords(info.ClassName)
+
+    for _, queryWord in ipairs(
+        queryWords
+    ) do
+
+        for _, objectWord in ipairs(
+            nameWords
+        ) do
+
+            score = score
+                + ScoreWordMatch(
+                    queryWord,
+                    objectWord
+                )
         end
 
+        for _, objectWord in ipairs(
+            pathWords
+        ) do
+
+            score = score
+                + (
+                    ScoreWordMatch(
+                        queryWord,
+                        objectWord
+                    )
+                    * 0.5
+                )
+        end
+
+        for _, objectWord in ipairs(
+            classWords
+        ) do
+
+            score = score
+                + (
+                    ScoreWordMatch(
+                        queryWord,
+                        objectWord
+                    )
+                    * 0.25
+                )
+        end
     end
 
-    return false
-end
+    if intent == "autofarm"
+        and info.Category == "Checkpoints" then
 
-function AIPromptEng.ClearScripts()
-    AIPromptEng.Database.Scripts = {}
-end
-
-function AIPromptEng.ClearGameIndex()
-    AIPromptEng.Database.GameObjects = {}
-    AIPromptEng.Database.Vocabulary = {}
-end
-
-function AIPromptEng.RegisterScript(data)
-    if type(data) ~= "table" then
-        return false
+        score = score + 30
     end
 
-    table.insert(
-        AIPromptEng.Database.Scripts,
-        data
-    )
-
-    LearnObject(data)
-
-    return true
+    return score
 end
 
-function AIPromptEng.RegisterGameObject(data)
-    if type(data) ~= "table" then
-        return false
-    end
-
-    table.insert(
-        AIPromptEng.Database.GameObjects,
-        data
-    )
-
-    if AIPromptEng.Config.LearnFromGame then
-        LearnObject(data)
-    end
-
-    return true
-end
-
-function AIPromptEng.RegisterGameIndex(list)
-    if type(list) ~= "table" then
-        return false
-    end
-
-    for _, data in ipairs(list) do
-        AIPromptEng.RegisterGameObject(data)
-    end
-
-    return true
-end
-
-function AIPromptEng.AddAlias(alias, target)
-    alias = Normalize(alias)
-    target = Normalize(target)
-
-    if alias == ""
-        or target == "" then
-
-        return false
-    end
-
-    AIPromptEng.Database.LearnedAliases[
-        alias
-    ] = target
-
-    return true
-end
-
-function AIPromptEng.FindMatches(query, intent)
-    query = SafeString(query)
-
+function AIPromptEng.FindMatches(
+    query,
+    intent
+)
     local results = {}
-    local normalizedQuery =
-        Normalize(query)
-
-    local searchCheckpoints =
-        intent == "autofarm"
-        or intent == "goto"
-
-    local allObjects = {}
+    local queryWords =
+        GetWords(query)
 
     for _, info in ipairs(
-        AIPromptEng.Database.GameObjects
+        Database.Objects
     ) do
 
-        table.insert(
-            allObjects,
-            info
+        local score = ScoreInfo(
+            queryWords,
+            info,
+            intent
         )
 
-    end
-
-    for _, info in ipairs(
-        AIPromptEng.Database.Scripts
-    ) do
-
-        table.insert(
-            allObjects,
-            info
-        )
-
-    end
-
-    for _, info in ipairs(allObjects) do
-
-        local category =
-            Normalize(info.Category)
-
-        if category ~= "parts"
-            or searchCheckpoints
-            or IsCheckpointObject(info) then
-
-            local text =
-                ObjectSearchText(info)
-
-            local score =
-                WordSimilarity(
-                    normalizedQuery,
-                    text
-                )
-
-            local queryWords =
-                GetWords(normalizedQuery)
-
-            for _, word in ipairs(queryWords) do
-
-                if string.find(
-                    text,
-                    word,
-                    1,
-                    true
-                ) then
-
-                    score =
-                        score + 15
-
-                end
-
-            end
-
-            local name =
-                Normalize(info.Name)
-
-            if name ~= ""
-                and string.find(
-                    name,
-                    normalizedQuery,
-                    1,
-                    true
-                ) then
-
-                score =
-                    score + 50
-
-            end
-
-            if string.find(
-                normalizedQuery,
-                name,
-                1,
-                true
-            ) then
-
-                score =
-                    score + 40
-
-            end
-
-            if intent == "autofarm"
-                and IsCheckpointObject(info) then
-
-                score =
-                    score + 25
-
-            end
-
-            if score > 10 then
-
-                table.insert(
-                    results,
-                    {
-                        Score = score,
-                        Object = info,
-                        Script = info
-                    }
-                )
-
-            end
-
+        if score > 0 then
+            table.insert(
+                results,
+                {
+                    Score = score,
+                    Object = info,
+                    Script = info
+                }
+            )
         end
-
     end
 
     table.sort(
@@ -831,10 +649,11 @@ function AIPromptEng.FindMatches(query, intent)
 
     local limited = {}
 
-    for index, result in ipairs(results) do
+    for index, result in ipairs(
+        results
+    ) do
 
-        if index >
-            AIPromptEng.Config.MaxMatches then
+        if index > 30 then
             break
         end
 
@@ -842,297 +661,247 @@ function AIPromptEng.FindMatches(query, intent)
             limited,
             result
         )
-
     end
 
     return limited
 end
 
-local function ExtractZone(prompt)
-    local text = Normalize(prompt)
+function AIPromptEng.ClearScripts()
+    Database.Scripts = {}
 
-    local patterns = {
-        "to the ([%w%s]+) zone",
-        "to ([%w%s]+) zone",
-        "in the ([%w%s]+) zone",
-        "go to ([%w%s]+)"
-    }
-
-    for _, pattern in ipairs(patterns) do
-
-        local value =
-            string.match(
-                text,
-                pattern
-            )
-
-        if value then
-
-            value =
-                value:gsub(
-                    "^%s+",
-                    ""
-                )
-
-            value =
-                value:gsub(
-                    "%s+$",
-                    ""
-                )
-
-            return value
-        end
-
-    end
-
-    return "unknown"
+    Database.Categories.Scripts = {}
+    Database.Categories.LocalScripts = {}
+    Database.Categories.ModuleScripts = {}
 end
 
-local function BuildAutofarmCommand(prompt)
-    local text = Normalize(prompt)
+function AIPromptEng.ClearGameIndex()
+    Database.Scripts = {}
+    Database.Objects = {}
+    Database.Vocabulary = {}
 
-    local zone =
-        ExtractZone(text)
-
-    local target = "target"
-
-    local skip = {
-        make = true,
-        me = true,
-        an = true,
-        a = true,
-        autofarm = true,
-        auto = true,
-        farm = true,
-        that = true,
-        goes = true,
-        go = true,
-        to = true,
-        the = true,
-        zone = true,
-        get = true,
-        best = true,
-        return = true,
-        base = true,
-        and = true
-    }
-
-    for _, word in ipairs(
-        GetWords(text)
+    for category in pairs(
+        Database.Categories
     ) do
 
-        if not skip[word] then
+        Database.Categories[category] = {}
+    end
+end
 
-            if word ~= zone then
-                target = word
-            end
+function AIPromptEng.RegisterScript(info)
+    if type(info) ~= "table" then
+        return false
+    end
 
+    if not info.Category then
+        info.Category = "Scripts"
+    end
+
+    return AddObject(info)
+end
+
+function AIPromptEng.RegisterGameObject(info)
+    return AddObject(info)
+end
+
+function AIPromptEng.RegisterGameIndex(list)
+    if type(list) ~= "table" then
+        return false
+    end
+
+    local added = 0
+
+    for _, info in ipairs(list) do
+        if AddObject(info) then
+            added = added + 1
         end
-
     end
 
-    local command = {}
-
-    if zone ~= "unknown" then
-
-        table.insert(
-            command,
-            "goto "
-            .. zone
-            .. " zone"
-        )
-
-    end
-
-    if DetectBestValue(text) then
-
-        table.insert(
-            command,
-            "get bestValue "
-            .. target
-        )
-
-    else
-
-        table.insert(
-            command,
-            "get "
-            .. target
-        )
-
-    end
-
-    if Contains(text, "return")
-        or Contains(text, "base") then
-
-        table.insert(
-            command,
-            "return to base"
-        )
-
-    end
-
-    return table.concat(
-        command,
-        " - "
-    )
+    return added
 end
 
-local function AddFeedback(prompt, parsed)
-    table.insert(
-        AIPromptEng.Database.Feedback,
-        {
-            Prompt = SafeString(prompt),
-            Intent = parsed.Intent,
-            Action = parsed.Action,
-            Target = parsed.Target,
-            Confidence = parsed.Confidence,
-            Time = os.time()
-        }
-    )
+function AIPromptEng.ScanReplicatedGame()
+    AIPromptEng.ClearGameIndex()
+
+    local success, descendants =
+        pcall(function()
+            return game:GetDescendants()
+        end)
+
+    if not success then
+        return {}, 0
+    end
+
+    local indexed = {}
+
+    for _, instance in ipairs(
+        descendants
+    ) do
+
+        local successInfo, info =
+            pcall(
+                MakeInfo,
+                instance
+            )
+
+        if successInfo
+            and info then
+
+            if AddObject(info) then
+                table.insert(
+                    indexed,
+                    info
+                )
+            end
+        end
+    end
+
+    return indexed, #indexed
 end
 
-local function BuildContext(parsed)
-    local lines = {}
+function AIPromptEng.LearnAlias(
+    alias,
+    target
+)
+    alias = Normalize(alias)
+    target = Normalize(target)
 
-    table.insert(
-        lines,
-        "PROMPT_DATA"
-    )
+    if alias == ""
+        or target == "" then
 
-    table.insert(
-        lines,
-        "INTENT="
-        .. SafeString(parsed.Intent)
-    )
-
-    table.insert(
-        lines,
-        "ACTION="
-        .. SafeString(parsed.Action)
-    )
-
-    table.insert(
-        lines,
-        "TARGET="
-        .. SafeString(parsed.Target)
-    )
-
-    table.insert(
-        lines,
-        "SUBJECT="
-        .. SafeString(parsed.Subject)
-    )
-
-    if parsed.Value then
-
-        table.insert(
-            lines,
-            "VALUE_OF="
-            .. SafeString(parsed.Value)
-        )
-
+        return false
     end
 
-    if parsed.AddingOf then
+    Database.LearnedAliases[alias] =
+        target
 
-        table.insert(
-            lines,
-            "ADDING_OF="
-            .. SafeString(parsed.AddingOf)
-        )
+    return true
+end
 
+function AIPromptEng.AddFeedback(
+    prompt,
+    correctIntent,
+    correctTarget
+)
+    local item = {
+        Prompt = Safe(prompt),
+        Intent = Safe(correctIntent),
+        Target = Safe(correctTarget)
+    }
+
+    table.insert(
+        Database.Feedback,
+        item
+    )
+
+    if item.Target ~= "" then
+        for _, word in ipairs(
+            GetWords(item.Prompt)
+        ) do
+
+            if word ~= item.Target then
+                Database.LearnedAliases[word] =
+                    item.Target
+            end
+        end
     end
 
-    table.insert(
-        lines,
-        "GUI="
-        .. tostring(parsed.GUI)
-    )
+    return item
+end
 
-    table.insert(
-        lines,
-        "RAYFIELD="
-        .. tostring(parsed.Rayfield)
-    )
+local function BuildAutofarmCommand(
+    prompt,
+    target,
+    matches
+)
+    local commands = {}
 
-    if parsed.Zone
-        and parsed.Zone ~= "unknown" then
+    local lower =
+        Normalize(prompt)
 
-        table.insert(
-            lines,
-            "ZONE="
-            .. SafeString(parsed.Zone)
-        )
+    local zone = nil
 
-    end
-
-    if parsed.Command then
-
-        table.insert(
-            lines,
-            "COMMAND="
-            .. SafeString(parsed.Command)
-        )
-
-    end
-
-    table.insert(
-        lines,
-        "CONFIDENCE="
-        .. tostring(parsed.Confidence)
-    )
-
-    table.insert(
-        lines,
-        "MATCH_COUNT="
-        .. tostring(parsed.MatchCount)
-    )
-
-    for index, match in ipairs(
-        parsed.Matches
+    for _, match in ipairs(
+        matches
     ) do
 
         local info =
             match.Object
-            or match.Script
-            or {}
+            or match
+
+        if info.Category == "Checkpoints"
+            or Contains(
+                info.Name,
+                "zone"
+            ) then
+
+            zone = info.Name
+            break
+        end
+    end
+
+    if Contains(
+        lower,
+        "rare zone"
+    ) then
 
         table.insert(
-            lines,
-            "MATCH_"
-            .. tostring(index)
-            .. "="
-            .. SafeString(info.Category)
-            .. "|"
-            .. SafeString(info.Path)
+            commands,
+            "goto rare zone"
         )
+    elseif zone then
+        table.insert(
+            commands,
+            "goto " .. zone
+        )
+    end
 
+    if Contains(
+        lower,
+        "best"
+    ) then
+
+        table.insert(
+            commands,
+            "get bestValue "
+            .. Safe(target)
+        )
+    else
+        table.insert(
+            commands,
+            "get "
+            .. Safe(target)
+        )
+    end
+
+    if Contains(
+        lower,
+        "return"
+    )
+    or Contains(
+        lower,
+        "base"
+    ) then
+
+        table.insert(
+            commands,
+            "return to base"
+        )
     end
 
     return table.concat(
-        lines,
-        "\n"
+        commands,
+        " - "
     )
 end
 
 function AIPromptEng.Process(prompt)
-    prompt = SafeString(prompt)
+    prompt = Safe(prompt)
 
     local intent, intentScore =
         DetectIntent(prompt)
 
-    local action =
-        DetectAction(
-            prompt,
-            intent
-        )
-
     local target =
         DetectTarget(prompt)
-
-    local subject =
-        DetectSubject(prompt)
 
     local value =
         ExtractNumber(prompt)
@@ -1143,184 +912,223 @@ function AIPromptEng.Process(prompt)
     local rayfield =
         DetectRayfield(prompt)
 
+    local action =
+        "unknown"
+
+    if intent == "set" then
+        action = "setTarget"
+    elseif intent == "add" then
+        action = "addTarget"
+    elseif intent == "remove" then
+        action = "removeTarget"
+    elseif intent == "find" then
+        action = "findTarget"
+    elseif intent == "autofarm" then
+        action = "autofarm"
+    elseif gui
+        and intent == "create" then
+
+        action = "createGUI"
+    elseif intent == "create" then
+        action = "create"
+    end
+
     local matches =
         AIPromptEng.FindMatches(
             prompt,
             intent
         )
 
-    local confidence =
-        math.min(
-            intentScore,
-            100
-        )
+    local confidence = 20
+
+    if intent ~= "unknown" then
+        confidence = confidence + 25
+    end
 
     if target ~= "unknown" then
-        confidence =
-            confidence + 20
+        confidence = confidence + 20
     end
 
     if value then
-        confidence =
-            confidence + 10
+        confidence = confidence + 10
     end
 
     if #matches > 0 then
-        confidence =
-            confidence + math.min(
-                matches[1].Score / 4,
-                30
-            )
+        confidence = confidence + 25
     end
 
-    confidence =
-        math.min(
-            math.floor(confidence),
-            100
-        )
+    if intentScore > 0 then
+        confidence = confidence + 10
+    end
+
+    confidence = math.min(
+        confidence,
+        100
+    )
 
     local parsed = {
         Prompt = prompt,
         Intent = intent,
         Action = action,
         Target = target,
-        Subject = subject,
+        Subject = "me",
         Value = nil,
         AddingOf = nil,
         GUI = gui,
         Rayfield = rayfield,
-        Zone = "unknown",
-        BestValue = DetectBestValue(prompt),
-        Command = nil,
-        Confidence = confidence,
         Matches = matches,
-        MatchCount = #matches
+        MatchCount = #matches,
+        Confidence = confidence
     }
 
-    if action == "setTarget" then
+    if intent == "set" then
         parsed.Value = value
     end
 
-    if action == "addTarget" then
+    if intent == "add" then
         parsed.AddingOf = value
     end
 
     if intent == "autofarm" then
-
-        parsed.Intent = "autofarm"
-        parsed.Action = "autofarm"
-        parsed.Target = target
-        parsed.Zone =
-            ExtractZone(prompt)
+        parsed.GUI = false
 
         parsed.Command =
             BuildAutofarmCommand(
-                prompt
+                prompt,
+                target,
+                matches
             )
-
-        parsed.GUI = false
-
     end
 
-    if gui
-        and action ~= "autofarm" then
-
-        if action == "unknown"
-            or action == "create" then
-
-            parsed.Action =
-                "createGUI"
-
-        end
-
-    end
-
-    if parsed.Intent == "add"
-        and parsed.Action == "unknown" then
-
-        parsed.Action =
-            "addTarget"
-
-    end
-
-    if parsed.Intent == "set"
-        and parsed.Action == "unknown" then
-
-        parsed.Action =
-            "setTarget"
-
-    end
-
-    if parsed.Confidence <
-        AIPromptEng.Config.FeedbackConfidence then
-
-        AddFeedback(
-            prompt,
-            parsed
+    if confidence < 45 then
+        table.insert(
+            Database.Feedback,
+            {
+                Prompt = prompt,
+                Parsed = parsed,
+                Reason = "Low confidence"
+            }
         )
-
     end
 
     table.insert(
-        AIPromptEng.Database.History,
+        Database.History,
         parsed
     )
 
-    if #AIPromptEng.Database.History > 100 then
+    if #Database.History > 250 then
         table.remove(
-            AIPromptEng.Database.History,
+            Database.History,
             1
         )
     end
 
-    local context =
-        BuildContext(parsed)
+    local context = table.concat(
+        {
+            "INTENT="
+                .. Safe(
+                    parsed.Intent
+                ),
+
+            "ACTION="
+                .. Safe(
+                    parsed.Action
+                ),
+
+            "TARGET="
+                .. Safe(
+                    parsed.Target
+                ),
+
+            "SUBJECT="
+                .. Safe(
+                    parsed.Subject
+                ),
+
+            "VALUE_OF="
+                .. Safe(
+                    parsed.Value
+                ),
+
+            "ADDING_OF="
+                .. Safe(
+                    parsed.AddingOf
+                ),
+
+            "GUI="
+                .. tostring(
+                    parsed.GUI
+                ),
+
+            "RAYFIELD="
+                .. tostring(
+                    parsed.Rayfield
+                ),
+
+            "COMMAND="
+                .. Safe(
+                    parsed.Command
+                ),
+
+            "CONFIDENCE="
+                .. tostring(
+                    parsed.Confidence
+                ),
+
+            "MATCH_COUNT="
+                .. tostring(
+                    parsed.MatchCount
+                )
+        },
+        "\n"
+    )
 
     return parsed, context
 end
 
-function AIPromptEng.GetFeedback()
-    return AIPromptEng.Database.Feedback
+function AIPromptEng.GetDatabase()
+    return Database
 end
 
-function AIPromptEng.GetVocabulary()
-    return AIPromptEng.Database.Vocabulary
+function AIPromptEng.GetFeedback()
+    return Database.Feedback
 end
 
 function AIPromptEng.GetHistory()
-    return AIPromptEng.Database.History
+    return Database.History
 end
 
-function AIPromptEng.ClearFeedback()
-    AIPromptEng.Database.Feedback = {}
-end
-
-function AIPromptEng.LearnAliasFromFeedback(
-    alias,
-    target
-)
-    return AIPromptEng.AddAlias(
-        alias,
-        target
-    )
+function AIPromptEng.GetVocabulary()
+    return Database.Vocabulary
 end
 
 function AIPromptEng.GetStats()
     return {
-        Scripts =
-            #AIPromptEng.Database.Scripts,
+        Version = AIPromptEng.Version,
+        Scripts = #Database.Scripts,
+        Objects = #Database.Objects,
+        Feedback = #Database.Feedback,
+        History = #Database.History,
+        Vocabulary = #GetWords(
+            table.concat(
+                (function()
+                    local words = {}
 
-        GameObjects =
-            #AIPromptEng.Database.GameObjects,
+                    for word in pairs(
+                        Database.Vocabulary
+                    ) do
 
-        Feedback =
-            #AIPromptEng.Database.Feedback,
+                        table.insert(
+                            words,
+                            word
+                        )
+                    end
 
-        History =
-            #AIPromptEng.Database.History,
-
-        Version =
-            AIPromptEng.Version
+                    return words
+                end)(),
+                " "
+            )
+        )
     }
 end
 
